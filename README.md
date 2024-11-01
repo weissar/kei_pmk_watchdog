@@ -20,7 +20,7 @@ MEMORY
   FLASH   (rx) : ORIGIN =  0x8000000, LENGTH = 512K
 }
 ...
-  .wdg_ram_data : AT (0x20001ff8)
+  .wdg_ram_data :
   {
     . = ALIGN(4);
     _swdg_ram_data = .;

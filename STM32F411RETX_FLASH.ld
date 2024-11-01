@@ -176,7 +176,7 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
   
-  .wdg_ram_data : AT (0x20001ff8)
+  .wdg_ram_data :
   {
     . = ALIGN(4);
     _swdg_ram_data = .;
