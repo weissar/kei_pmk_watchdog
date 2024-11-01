@@ -10,11 +10,23 @@ int STM_WDG_GetReason(void);
 uint32_t STM_WDG_GetMagic(void);
 ```
 
-For WDG reason detection it requires modification of .LD file to create 2x 32bit gap on the top of RAM ("behind" the STACK):
+For WDG reason detection it requires modification of .LD file to create 2x 32bit gap on the top of RAM ("behind" the STACK). Need to add new MEMORY area WDGRAM, modify size of RAM area and add new segment/section:
 ```C++
 ...
-/* _estack = ORIGIN(RAM) + LENGTH(RAM); */ /* end of "RAM" Ram type memory */
-_estack = ORIGIN(RAM) + LENGTH(RAM) - 8; /* end of "RAM" Ram type memory minus 8B gap */
+MEMORY
+{
+  RAM    (xrw) : ORIGIN = 0x20000000, LENGTH = 128k - 8  /* 128 * 1024 - 8 */
+  WDGRAM (arw) : ORIGIN = 0x20001ff8, LENGTH = 8
+  FLASH   (rx) : ORIGIN =  0x8000000, LENGTH = 512K
+}
+...
+  .wdg_ram_data : AT (0x20001ff8)
+  {
+    . = ALIGN(4);
+    _swdg_ram_data = .;
+    *(.wdg_ram_data);
+    _ewdg_ram_data = .;
+  } >WDGRAM
 ...
 ```
 ***

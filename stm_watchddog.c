@@ -8,53 +8,20 @@
 #define NULL ((void *)0)
 #endif  // NULL
 
-//! configurable !!
-// #define USE_WDG_STORE_ESTACK
-
 #define WDG_MAGIC_CONSTANT    0xDEADBEEF
 
-#ifdef USE_WDG_STORE_ESTACK
-// Symbols defined in the linker script
-extern uint8_t _estack;
-extern uint8_t _eram;
-extern uint32_t _Min_Stack_Size;
-#endif  // USE_WDG_STORE_ESTACK
-
-static uint32_t *_memGapAddress = (void *)0xffffffff;
-
-void _calcGapAddress(void)
-{
-  if ((uint32_t)_memGapAddress == 0xffffffff)
-  {
-#ifdef USE_WDG_STORE_ESTACK
-    const uint32_t ram_stack_gap = (uint32_t)&_eram - (uint32_t)&_estack;
-
-    if (ram_stack_gap >= 8)
-    {
-      _memGapAddress = (uint32_t *)((uint32_t)&_eram - 8);
-    }
+// https://ftp.gnu.org/old-gnu/Manuals/ld-2.9.1/html_mono/ld.html#SEC6
+#if 1
+// https://gcc.gnu.org/onlinedocs/gcc-3.2/gcc/Variable-Attributes.html
+// __attribute__ ((section ("wdg_ram_data"))) static uint32_t _wdg_data_area[2];
+static uint32_t _wdg_data_area[2] __attribute__ ((section (".wdg_ram_data")));
 #else
-#ifndef STM32F411xE
-#error This code is specific for F411, e.g. with RAM size 128kB
+extern uint8_t _swdg_ram_data;
+static uint32_t *_wdg_data_area = (uint32_t *)&_swdg_ram_data;
 #endif
-
-#define _RAM_END  (SRAM_BASE + 128 * 1024)        // 128k RAM
-
-    uint32_t initSP = *(uint32_t *)0;   // SP from vector area
-    if (initSP <= (_RAM_END - 8))       // min. 8 bytes from RAM end ?
-    {
-      _memGapAddress = (uint32_t *)(_RAM_END - 8);
-    }
-    else
-      _memGapAddress = NULL;            // for sure
-#endif  // USE_WDG_STORE_ESTACK
-  }
-}
 
 bool STM_IWDG_Init(int timeMs)
 {
-  _calcGapAddress();
-
   IWDG->KR = 0x5555;                  // unlock write protect
 
   while (IWDG->SR & IWDG_SR_PVU)      // wait for PR executed
@@ -67,21 +34,9 @@ bool STM_IWDG_Init(int timeMs)
 
   IWDG->KR = 0xCCCC;                  // start "watching"
 
-  if (_memGapAddress != NULL)         // is there "special" area ?
-  {
-#ifdef USE_WDG_STORE_ESTACK
-    uint32_t *xptr = (uint32_t *)(&_eram - 8);
-
-    xptr[0] = WDG_MAGIC_CONSTANT;
-    xptr[1] = 0;
-#else
-    _memGapAddress[0] = WDG_MAGIC_CONSTANT;
-    _memGapAddress[1] = 0;
-#endif  // USE_WDG_STORE_ESTACK
-    return true;
-  }
-  else
-    return false;
+  _wdg_data_area[0] = WDG_MAGIC_CONSTANT;
+  _wdg_data_area[1] = 0;
+  return true;
 }
 
 bool STM_IWDG_Reset(void)
@@ -92,34 +47,16 @@ bool STM_IWDG_Reset(void)
 
 bool STM_IWDG_SetReason(int reason)
 {
-  // zde se predpoklada uspesny "Init"
-  if (_memGapAddress != NULL)
-  {
-    _memGapAddress[1] = reason;
-    return true;
-  }
-  else
-    return false;
+  _wdg_data_area[1] = reason;
+  return true;
 }
 
 int STM_WDG_GetReason(void)
 {
-  _calcGapAddress();            // can be not initialized after RESET
-
-  if ((_memGapAddress != NULL) && (*_memGapAddress == WDG_MAGIC_CONSTANT))
-  {
-    return _memGapAddress[1];
-  }
-
-  return -1;                    // fail as return value
+  return _wdg_data_area[1];
 }
 
 uint32_t STM_WDG_GetMagic(void)
 {
-  _calcGapAddress();            // can be not initialized after RESET
-
-  if (_memGapAddress != NULL)
-    return _memGapAddress[0];
-  else
-    return 0;
+  return _wdg_data_area[0];
 }
